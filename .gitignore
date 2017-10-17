@@ -8,8 +8,6 @@
 *.tmpBin
 /logs
 /bin/
-/sbt
-/sbt.bat
 *.sbtserver*
 bin
 .cache-tests
