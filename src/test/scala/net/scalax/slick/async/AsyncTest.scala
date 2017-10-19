@@ -1,13 +1,14 @@
 package net.scalax.slick.async
 
+import net.scalax.umr.ShapeHelper
+
 import scala.language.higherKinds
-
 import slick.jdbc.H2Profile.api._
-
 import org.h2.jdbcx.JdbcDataSource
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.slf4j.LoggerFactory
+import slick.ast.ProductNode
 
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -30,7 +31,8 @@ class AsyncTest extends FlatSpec
   with EitherValues
   with ScalaFutures
   with BeforeAndAfterAll
-  with BeforeAndAfter {
+  with BeforeAndAfter
+  with ShapeHelper {
 
   val t = 10.seconds
   override implicit val patienceConfig = PatienceConfig(timeout = t)
@@ -66,12 +68,33 @@ class AsyncTest extends FlatSpec
         inFriend <- friendTq.result
       } yield {
         inFriend.map { s =>
-          println(s)
+          //println(s)
           s
         }
       }
       db.run(friendQuery).futureValue
       db.run(friendTq.update(Friends(None, "hahahahaha", "hahahahaha"))).futureValue
+      db.run(friendQuery).futureValue
+    } catch {
+      case e: Exception =>
+        logger.error("error", e)
+        throw e
+    }
+  }
+
+  "shape" should "decode reps with db" in {
+    val query = friendTq.map { friend =>
+      List(friend.nick, friend.name)
+    }
+    try {
+      val friendQuery = for {
+        inFriend <- query.result
+      } yield {
+        inFriend.map { s =>
+          println(s)
+          s
+        }
+      }
       db.run(friendQuery).futureValue
     } catch {
       case e: Exception =>
