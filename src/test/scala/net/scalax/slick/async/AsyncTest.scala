@@ -89,11 +89,11 @@ class AsyncTest extends FlatSpec
     try {
       val friendQuery = for {
         inFriend <- query.result
+      } yield for {
+        s <- inFriend
       } yield {
-        inFriend.map { s =>
-          println(s)
-          s
-        }
+        println(s)
+        s
       }
       db.run(friendQuery).futureValue
     } catch {
