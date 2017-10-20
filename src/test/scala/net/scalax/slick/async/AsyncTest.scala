@@ -84,7 +84,7 @@ class AsyncTest extends FlatSpec
 
   "shape" should "decode reps with db" in {
     val query = friendTq.map { friend =>
-      friend.id -> List(friend.nick, friend.name)
+      (friend.id, List(friend.nick, friend.name), friend.id)
     }
     try {
       val friendQuery = for {
