@@ -14,7 +14,7 @@ trait ShapeHelper {
   }
 }
 
-abstract class ProductNodeShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C] extends Shape[Level, Seq[M], Seq[U], Seq[P]] {
+trait ProductNodeShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C] extends Shape[Level, Seq[M], Seq[U], Seq[P]] {
   /** The Shapes for the product elements. */
   val elementShape: Shape[_ <: ShapeLevel, _, _, _]
 
