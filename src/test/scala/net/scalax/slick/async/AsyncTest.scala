@@ -83,8 +83,8 @@ class AsyncTest extends FlatSpec
   }
 
   "shape" should "decode reps with db" in {
-    val query = friendTq.map { friend =>
-      friend.id -> List(friend.nick, friend.name)
+    val query = friendTq.filter(_.id > 0L).map { friend =>
+      List(friend.nick, friend.name)
     }
     try {
       val friendQuery = for {
@@ -96,6 +96,20 @@ class AsyncTest extends FlatSpec
         }
       }
       db.run(friendQuery).futureValue
+    } catch {
+      case e: Exception =>
+        logger.error("error", e)
+        throw e
+    }
+  }
+
+  "shape" should "decode reps with update" in {
+    val query = friendTq.map { friend =>
+      List(friend.nick, friend.name)
+    }
+    try {
+      val action = query.update(List("汪汪酱", "喵喵酱"))
+      db.run(action).futureValue
     } catch {
       case e: Exception =>
         logger.error("error", e)

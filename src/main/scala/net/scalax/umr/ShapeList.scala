@@ -1,27 +1,17 @@
 package net.scalax.umr
 
+import slick.SlickException
 import slick.ast._
 import slick.lifted._
 import slick.util.{ ConstArray, ProductWrapper, TupleSupport }
 
 import scala.language.higherKinds
 import scala.reflect.ClassTag
-/*class SeqShape[Level <: ShapeLevel, C, M <: C, U <: C, P <: C](inputShapes: Seq[Shape[Level, M, U, P]])
-  extends MappedProductShape[Level, Seq[C], Seq[M], Seq[U], Seq[P]] {
-  override val shapes: Seq[Shape[_ <: ShapeLevel, _, _, _]] = inputShapes
-  override def getIterator(value: Seq[C]): Iterator[Any] = value.toIterator
-  override def getElement(value: Seq[C], idx: Int): Any = value(idx)
-  override def buildValue(elems: IndexedSeq[Any]): Any = elems
-  override def copy(shapes: Seq[Shape[_ <: ShapeLevel, _, _, _]]): Shape[Level, _, _, _] = new SeqShape(shapes.map(_.asInstanceOf[Shape[Level, M, U, P]]))
-  override val classTag: ClassTag[Seq[U]] = implicitly[ClassTag[Seq[U]]]
-}*/
+
 trait ShapeHelper {
-
-  implicit def seqShapeGen[M, U, P](implicit shapes: Shape[FlatShapeLevel, M, U, P]): Shape[FlatShapeLevel, Seq[M], Seq[U], Seq[P]] = {
+  implicit def seqShapeGen[Level <: FlatShapeLevel, M, U, P](implicit shapes: Shape[_ <: Level, M, U, P]): Shape[Level, Seq[M], Seq[U], Seq[P]] = {
     new ListAnyShape1111(shapes)
-
   }
-
 }
 
 abstract class ProductNodeShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C] extends Shape[Level, Seq[M], Seq[U], Seq[P]] {
@@ -44,47 +34,21 @@ abstract class ProductNodeShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <:
    * Get an Iterator of a record value's element values. The default
    * implementation repeatedly calls `getElement`.
    */
-  def getIterator(value: Seq[C]): Iterator[Any] =
-    //TODO
-    value.zipWithIndex.map(t => getElement(value, t._2)).iterator
-  //(1 to value.size).map(t => getElement(value, t)).iterator
+  def getIterator(value: Seq[C]): Iterator[Any] = {
+    value.iterator
+  }
 
   def pack(value: Mixed) = {
-    //val elems = shapes.iterator.zip(getIterator(value)).map{ case (p, f) => p.pack(f.asInstanceOf[p.Mixed]) }
-    //buildValue(elems.toIndexedSeq).asInstanceOf[Packed]
     val elems = getIterator(value).map { case f => elementShape.pack(f.asInstanceOf[elementShape.Mixed]) }
     buildValue(elems.toIndexedSeq).asInstanceOf[Packed]
   }
   def packedShape: Shape[Level, Packed, Unpacked, Packed] =
     copy(elementShape.packedShape).asInstanceOf[Shape[Level, Packed, Unpacked, Packed]]
+
   def buildParams(extract: Any => Unpacked): Packed = {
-    /*val elems = shapes.iterator.zipWithIndex.map { case (p, idx) =>
-      def chExtract(u: C): p.Unpacked = getElement(u, idx).asInstanceOf[p.Unpacked]
-      p.buildParams(extract.andThen(chExtract))
-    }
-    buildValue(elems.toIndexedSeq).asInstanceOf[Packed]*/
-
-    //def chExtract1111(u: Seq[C]): elementShape.Unpacked = u.zipWithIndex.map { case (_, idx) =>
-    def aabb(model: Any): elementShape.Unpacked = {
-      val dataList = extract(model)
-      val dataListWithIndex = dataList.zipWithIndex
-      val dataElems = dataListWithIndex.map {
-        case (data, idx) =>
-          getElement(dataList, idx).asInstanceOf[elementShape.Unpacked]
-      }
-      dataElems.asInstanceOf[elementShape.Unpacked]
-    }
-    val elems = elementShape.buildParams(aabb)
-
-    buildValue(elems.asInstanceOf[Seq[_]].toIndexedSeq).asInstanceOf[Packed]
-    //}
-
+    throw new SlickException("Shape does not have the same Mixed and Unpacked type")
   }
-  def encodeRef(value: Mixed, path: Node) = {
-    /*val elems = shapes.iterator.zip(getIterator(value)).zipWithIndex.map {
-      case ((p, x), pos) => p.encodeRef(x.asInstanceOf[p.Mixed], Select(path, ElementSymbol(pos + 1)))
-    }
-    buildValue(elems.toIndexedSeq)*/
+  def encodeRef(value: Mixed, path: Node): Any = {
     val elems = getIterator(value).zipWithIndex.map {
       case (x, pos) => elementShape.encodeRef(x.asInstanceOf[elementShape.Mixed], Select(path, ElementSymbol(pos + 1)))
     }
@@ -95,19 +59,19 @@ abstract class ProductNodeShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <:
   }.toIterable))
 }
 
-abstract class MappedProductShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C] extends ProductNodeShape1111[Level, C, M, U, P] {
+trait MappedProductShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C] extends ProductNodeShape1111[Level, C, M, U, P] {
   override def toNode(value: Mixed) = TypeMapping(super.toNode(value), MappedScalaType.Mapper(toBase, toMapped, None), classTag)
   def toBase(v: Any) = new ProductWrapper(getIterator(v.asInstanceOf[Seq[C]]).toIndexedSeq)
   def toMapped(v: Any) = buildValue(TupleSupport.buildIndexedSeq(v.asInstanceOf[Product]))
   def classTag: ClassTag[Seq[U]]
 }
 
-final class ListAnyShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C](val inputShapes: Shape[Level, M, U, P])
+final class ListAnyShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C](val inputShapes: Shape[_ <: ShapeLevel, M, U, P])
   extends MappedProductShape1111[Level, C, M, U, P] {
   override val elementShape: Shape[_ <: ShapeLevel, _, _, _] = inputShapes
-  override def getIterator(value: Seq[C]): Iterator[Any] = value.toIterator
+  //override def getIterator(value: Seq[C]): Iterator[Any] = value.toIterator
   override def getElement(value: Seq[C], idx: Int): Any = value(idx)
   override def buildValue(elems: IndexedSeq[Any]): Any = elems
-  override def copy(shapes: Shape[_ <: ShapeLevel, _, _, _]): Shape[Level, _, _, _] = new ListAnyShape1111(shapes.asInstanceOf[Shape[Level, M, U, P]])
+  override def copy(shape: Shape[_ <: ShapeLevel, _, _, _]): Shape[Level, _, _, _] = new ListAnyShape1111(shape)
   override val classTag: ClassTag[Seq[U]] = implicitly[ClassTag[Seq[U]]]
 }
