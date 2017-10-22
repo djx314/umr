@@ -1,6 +1,6 @@
 package net.scalax.slick.async
 
-import net.scalax.umr.ShapeHelper
+import net.scalax.umr.{ ShapeHelper, SomeTest }
 
 import scala.language.higherKinds
 import slick.jdbc.H2Profile.api._
@@ -8,7 +8,6 @@ import org.h2.jdbcx.JdbcDataSource
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.slf4j.LoggerFactory
-import slick.ast.ProductNode
 
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -84,7 +83,7 @@ class AsyncTest extends FlatSpec
 
   "shape" should "decode reps with db" in {
     val query = friendTq.map { friend =>
-      (friend.id, List(friend.nick, friend.name), friend.id)
+      (friend.id, List(friend.nick, SomeTest.mapWritter(friend.name, t => t + "1111")), friend.id)
     }
     try {
       val friendQuery = for {

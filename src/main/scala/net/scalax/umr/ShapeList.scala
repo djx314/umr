@@ -39,7 +39,7 @@ trait ProductNodeShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C] exten
   }
 
   def pack(value: Mixed) = {
-    val elems = getIterator(value).map { case f => elementShape.pack(f.asInstanceOf[elementShape.Mixed]) }
+    val elems = getIterator(value).map { f => elementShape.pack(f.asInstanceOf[elementShape.Mixed]) }
     buildValue(elems.toIndexedSeq).asInstanceOf[Packed]
   }
   def packedShape: Shape[Level, Packed, Unpacked, Packed] =
