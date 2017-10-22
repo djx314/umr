@@ -83,7 +83,7 @@ class AsyncTest extends FlatSpec
 
   "shape" should "decode reps with db" in {
     val query = friendTq.map { friend =>
-      (friend.id, List(friend.nick, SomeTest.mapWritter(friend.name, t => t + "1111")), friend.id)
+      (friend.id, List(friend.nick, SomeTest.mapWritter(friend.name)(t => t + "1111")), friend.id)
     }
     try {
       val friendQuery = for {
@@ -109,6 +109,50 @@ class AsyncTest extends FlatSpec
     try {
       val action = query.update(List("汪汪酱", "喵喵酱"))
       db.run(action).futureValue
+    } catch {
+      case e: Exception =>
+        logger.error("error", e)
+        throw e
+    }
+  }
+
+  import io.circe.generic.auto._
+  import io.circe.syntax._
+  import io.circe._
+
+  case class ColInfo(name: String, typeName: String)
+
+  //列信息来源
+  val infos = List(
+    ColInfo("id", "Long"),
+    ColInfo("name", "String"),
+    ColInfo("nick", "String"))
+
+  def tableToCol(commonTable: FriendTable) = {
+    infos.map { info =>
+      info match {
+        case ColInfo(name, "Long") => SomeTest.toJson(name, commonTable.column[Long](name))
+        case ColInfo(name, "String") => SomeTest.toJson(name, commonTable.column[String](name))
+        case ColInfo(name, "Int") => SomeTest.toJson(name, commonTable.column[Int](name))
+      }
+    }
+  }
+
+  "shape" should "decode data to json object" in {
+    import SomeTest.repShape
+    val query = friendTq.map { friend =>
+      tableToCol(friend)
+    }
+    try {
+      val action = for {
+        inFriend <- query.result
+      } yield for {
+        s <- inFriend
+      } yield {
+        JsonObject.fromMap(s.toMap)
+      }
+      val jobj = db.run(action).futureValue
+      println(jobj.map(_.asJson).mkString("\n"))
     } catch {
       case e: Exception =>
         logger.error("error", e)

@@ -17,3 +17,11 @@ libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.7.21" % "test"
 libraryDependencies += "org.scala-lang" % "scala-compiler" % scalaVersion.value
 
 libraryDependencies += "org.scala-lang" % "scala-reflect" % scalaVersion.value
+
+val circeVersion = "0.8.0"
+
+libraryDependencies ++= Seq(
+  "io.circe" %% "circe-core",
+  "io.circe" %% "circe-generic",
+  "io.circe" %% "circe-parser"
+).map(_ % circeVersion)
