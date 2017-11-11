@@ -1,6 +1,6 @@
 package net.scalax.slick.async
 
-import net.scalax.umr.{ ShapeHelper, SomeTest }
+import net.scalax.umr.{ MappedShape, ShapeHelper }
 
 import scala.language.higherKinds
 import slick.jdbc.H2Profile.api._
@@ -83,7 +83,7 @@ class AsyncTest extends FlatSpec
 
   "shape" should "decode reps with db" in {
     val query = friendTq.map { friend =>
-      (friend.id, List(friend.nick, SomeTest.mapWritter(friend.name)(t => t + "1111")), friend.id)
+      (friend.id, List(friend.nick, MappedShape.repMap(friend.name -> friend.nick).map { case (name, nick) => s"姓名：$name 昵称：$nick" }), friend.id)
     }
     try {
       val friendQuery = for {
@@ -123,7 +123,7 @@ class AsyncTest extends FlatSpec
   case class ColInfo(name: String, typeName: String)
 
   //列信息来源
-  val infos = List(
+  val infos = Seq(
     ColInfo("id", "Long"),
     ColInfo("name", "String"),
     ColInfo("nick", "String"))
@@ -131,15 +131,14 @@ class AsyncTest extends FlatSpec
   def tableToCol(commonTable: FriendTable) = {
     infos.map { info =>
       info match {
-        case ColInfo(name, "Long") => SomeTest.toJson(name, commonTable.column[Long](name))
-        case ColInfo(name, "String") => SomeTest.toJson(name, commonTable.column[String](name))
-        case ColInfo(name, "Int") => SomeTest.toJson(name, commonTable.column[Int](name))
+        case ColInfo(name, "Long") => MappedShape.toJson(name, commonTable.column[Long](name))
+        case ColInfo(name, "String") => MappedShape.toJson(name, commonTable.column[String](name))
+        case ColInfo(name, "Int") => MappedShape.toJson(name, commonTable.column[Int](name))
       }
     }
   }
 
   "shape" should "decode data to json object" in {
-    import SomeTest.repShape
     val query = friendTq.map { friend =>
       tableToCol(friend)
     }

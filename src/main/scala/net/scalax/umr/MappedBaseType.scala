@@ -1,4 +1,4 @@
-package net.scalax.umr
+/*package net.scalax.umr
 
 import io.circe.{ Encoder, Json }
 import io.circe.syntax._
@@ -26,4 +26,4 @@ object SomeTest {
     new AnyExtensionMethods(rep.toNode).asColumnOf[(String, Json)]
   }
 
-}
+}*/ 
