@@ -1,6 +1,6 @@
 package net.scalax.slick.async
 
-import net.scalax.umr.{ MappedShape, ShapeHelper }
+import net.scalax.umr.{ ChangeList, MappedShape, Placeholder, ShapeHelper }
 
 import scala.language.higherKinds
 import slick.jdbc.H2Profile.api._
@@ -8,6 +8,7 @@ import org.h2.jdbcx.JdbcDataSource
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.slf4j.LoggerFactory
+import slick.lifted.ShapedValue
 
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -15,14 +16,16 @@ import scala.concurrent.ExecutionContext.Implicits.global
 case class Friends(
   id: Option[Long] = None,
   name: String,
-  nick: String)
+  nick: String,
+  age: Int)
 
 class FriendTable(tag: slick.lifted.Tag) extends Table[Friends](tag, "firend") {
   def id = column[Long]("id", O.AutoInc)
   def name = column[String]("name")
   def nick = column[String]("nick")
+  def age = column[Int]("age")
 
-  def * = (id.?, name, nick).mapTo[Friends]
+  def * = (id.?, name, nick, age).mapTo[Friends]
 }
 
 class AsyncTest extends FlatSpec
@@ -50,9 +53,9 @@ class AsyncTest extends FlatSpec
   }
 
   before {
-    val friend1 = Friends(None, "喵", "汪")
-    val friend2 = Friends(None, "jilen", "kerr")
-    val friend3 = Friends(None, "小莎莎", "烟流")
+    val friend1 = Friends(None, "喵", "汪", 23)
+    val friend2 = Friends(None, "jilen", "kerr", 26)
+    val friend3 = Friends(None, "小莎莎", "烟流", 20)
     db.run(friendTq ++= List(friend1, friend2, friend3)).futureValue
     friendTq.result
   }
@@ -72,7 +75,7 @@ class AsyncTest extends FlatSpec
         }
       }
       db.run(friendQuery).futureValue
-      db.run(friendTq.update(Friends(None, "hahahahaha", "hahahahaha"))).futureValue
+      db.run(friendTq.update(Friends(None, "hahahahaha", "hahahahaha", 26))).futureValue
       db.run(friendQuery).futureValue
     } catch {
       case e: Exception =>
@@ -140,18 +143,43 @@ class AsyncTest extends FlatSpec
 
   "shape" should "decode data to json object" in {
     val query = friendTq.map { friend =>
-      tableToCol(friend)
+      friend.id -> (tableToCol(friend): Seq[ShapedValue[Rep[(String, Json)], (String, Json)]])
     }
     try {
       val action = for {
         inFriend <- query.result
       } yield for {
-        s <- inFriend
+        (id, json) <- inFriend
       } yield {
-        JsonObject.fromMap(s.toMap)
+        JsonObject.fromMap(json.toMap)
       }
       val jobj = db.run(action).futureValue
       println(jobj.map(_.asJson).mkString("\n"))
+    } catch {
+      case e: Exception =>
+        logger.error("error", e)
+        throw e
+    }
+  }
+
+  "data" should "update dynamic" in {
+    val query = friendTq.map { friend =>
+      (
+        friend.name,
+        ChangeList(
+          MappedShape.set(friend.nick).value("我是小昵称"),
+          MappedShape.set(friend.age).value(2333)))
+    }
+    try {
+      val action = for {
+        effectRows <- query.update("我是匿名", Placeholder)
+      } yield for {
+        s <- friendTq.result
+      } yield {
+        s
+      }
+      val jobj = db.run(action.flatten).futureValue
+      println(jobj.mkString("\n"))
     } catch {
       case e: Exception =>
         logger.error("error", e)
