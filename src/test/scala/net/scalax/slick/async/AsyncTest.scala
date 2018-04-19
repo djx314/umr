@@ -129,7 +129,8 @@ class AsyncTest extends FlatSpec
   val infos = Seq(
     ColInfo("id", "Long"),
     ColInfo("name", "String"),
-    ColInfo("nick", "String"))
+    ColInfo("nick", "String"),
+    ColInfo("total", "Model"))
 
   def tableToCol(commonTable: FriendTable) = {
     infos.map { info =>
@@ -137,6 +138,7 @@ class AsyncTest extends FlatSpec
         case ColInfo(name, "Long") => MappedShape.toJson(name, commonTable.column[Long](name))
         case ColInfo(name, "String") => MappedShape.toJson(name, commonTable.column[String](name))
         case ColInfo(name, "Int") => MappedShape.toJson(name, commonTable.column[Int](name))
+        case ColInfo(name, "Model") => MappedShape.toJson(name, commonTable)
       }
     }
   }
