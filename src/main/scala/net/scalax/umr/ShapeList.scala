@@ -1,77 +1,167 @@
 package net.scalax.umr
 
-import slick.SlickException
-import slick.ast._
-import slick.lifted._
-import slick.util.{ ConstArray, ProductWrapper, TupleSupport }
+import slick.lifted.{FlatShapeLevel, MappedProjection, Shape, ShapedValue}
 
-import scala.language.higherKinds
-import scala.reflect.ClassTag
+import scala.language.existentials
+import scala.language.implicitConversions
 
-trait ShapeHelper {
-  implicit def seqShapeGen[Level <: FlatShapeLevel, M, U, P](implicit shapes: Shape[_ <: Level, M, U, P]): Shape[Level, Seq[M], Seq[U], Seq[P]] = {
-    new ListAnyShape1111(shapes)
-  }
-}
+trait ShapeValueWrap[F] {
+  self =>
 
-trait ProductNodeShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C] extends Shape[Level, Seq[M], Seq[U], Seq[P]] {
-  /** The Shapes for the product elements. */
-  val elementShape: Shape[_ <: ShapeLevel, _, _, _]
+  type Data
+  type Rep
+  type TargetRep
+  val rep: Rep
+  val shape: Shape[FlatShapeLevel, Rep, Data, TargetRep]
+  val dataToList: Data => F
+  val dataFromList: F => Option[Data]
 
-  /** Build a record value represented by this Shape from its element values. */
-  def buildValue(elems: IndexedSeq[Any]): Any
-
-  /**
-   * Create a copy of this Shape with new element Shapes. This is used for
-   * packing Shapes recursively.
-   */
-  def copy(shapes: Shape[_ <: ShapeLevel, _, _, _]): Shape[Level, _, _, _]
-
-  /** Get the element value from a record value at the specified index. */
-  def getElement(value: Seq[C], idx: Int): Any
-
-  /**
-   * Get an Iterator of a record value's element values. The default
-   * implementation repeatedly calls `getElement`.
-   */
-  def getIterator(value: Seq[C]): Iterator[Any] = {
-    value.iterator
-  }
-
-  def pack(value: Mixed) = {
-    val elems = getIterator(value).map { f => elementShape.pack(f.asInstanceOf[elementShape.Mixed]) }
-    buildValue(elems.toIndexedSeq).asInstanceOf[Packed]
-  }
-  def packedShape: Shape[Level, Packed, Unpacked, Packed] =
-    copy(elementShape.packedShape).asInstanceOf[Shape[Level, Packed, Unpacked, Packed]]
-
-  def buildParams(extract: Any => Unpacked): Packed = {
-    throw new SlickException("Shape does not have the same Mixed and Unpacked type")
-  }
-  def encodeRef(value: Mixed, path: Node): Any = {
-    val elems = getIterator(value).zipWithIndex.map {
-      case (x, pos) => elementShape.encodeRef(x.asInstanceOf[elementShape.Mixed], Select(path, ElementSymbol(pos + 1)))
+  def map[H](t: F => H,
+             r: H => Option[F] = (s: H) => Option.empty): ShapeValueWrap[H] = {
+    new ShapeValueWrap[H] {
+      override type Data = self.Data
+      override type Rep = self.Rep
+      override type TargetRep = self.TargetRep
+      override val rep = self.rep
+      override val shape = self.shape
+      override val dataToList = { (s: Data) =>
+        t(self.dataToList(s))
+      }
+      override val dataFromList = { (s: H) =>
+        r(s).flatMap(t => self.dataFromList(t))
+      }
     }
-    buildValue(elems.toIndexedSeq)
   }
-  def toNode(value: Mixed): Node = ProductNode(ConstArray.from(getIterator(value).map(value => elementShape -> value).map {
-    case (p, f) => p.toNode(f.asInstanceOf[p.Mixed])
-  }.toIterable))
 }
 
-trait MappedProductShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C] extends ProductNodeShape1111[Level, C, M, U, P] {
-  override def toNode(value: Mixed) = TypeMapping(super.toNode(value), MappedScalaType.Mapper(toBase, toMapped, None), classTag)
-  def toBase(v: Any) = new ProductWrapper(getIterator(v.asInstanceOf[Seq[C]]).toIndexedSeq)
-  def toMapped(v: Any) = buildValue(TupleSupport.buildIndexedSeq(v.asInstanceOf[Product]))
-  def classTag: ClassTag[Seq[U]]
+object ShapeValueWrap {
+
+  implicit def toWrap[R, D, T](rep: R)(
+      implicit shape: Shape[FlatShapeLevel, R, D, T]): ShapeValueWrap[D] = {
+    val rep1 = rep
+    val shape1 = shape
+    new ShapeValueWrap[D] {
+      override type TargetRep = T
+      override type Data = D
+      override type Rep = R
+      override val shape = shape1
+      override val dataToList = { (data: D) =>
+        data
+      }
+      override val dataFromList = { (data: D) =>
+        Option(data)
+      }
+      override val rep = rep1
+    }
+  }
+
 }
 
-final class ListAnyShape1111[Level <: ShapeLevel, C, M <: C, U <: C, P <: C](val inputShapes: Shape[_ <: ShapeLevel, M, U, P])
-  extends MappedProductShape1111[Level, C, M, U, P] {
-  override val elementShape: Shape[_ <: ShapeLevel, _, _, _] = inputShapes
-  //override def getIterator(value: Seq[C]): Iterator[Any] = value.toIterator
-  override def getElement(value: Seq[C], idx: Int): Any = value(idx)
-  override def buildValue(elems: IndexedSeq[Any]): Any = elems
-  override def copy(shape: Shape[_ <: ShapeLevel, _, _, _]): Shape[Level, _, _, _] = new ListAnyShape1111(shape)
-  override val classTag: ClassTag[Seq[U]] = implicitly[ClassTag[Seq[U]]]
+trait ShapeListWrap[F] {
+  type Data
+  type Rep
+  type TargetRep
+  val rep: Rep
+  val shape: Shape[FlatShapeLevel, Rep, Data, TargetRep]
+  val dataToList: Data => List[F]
+  val dataFromList: List[F] => Option[Data]
+}
+
+object ListShape {
+
+  def apply[T](v: ShapeValueWrap[T]*): ShapedValue[Any, List[T]] = {
+    val sWrap = v.toList match {
+      case head :: tail =>
+        val initWrap: ShapeListWrap[T] = new ShapeListWrap[T] {
+          override type Data = head.Data
+          override type Rep = head.Rep
+          override type TargetRep = head.TargetRep
+          override val rep: Rep = head.rep
+          override val shape = {
+            head.shape
+          }
+          override val dataToList: Data => List[T] = data =>
+            List(head.dataToList(data))
+          override val dataFromList: List[T] => Option[Data] = { data =>
+            head.dataFromList(data.head)
+          }
+        }
+
+        tail.foldLeft(initWrap) { (wrap, current) =>
+          val currentWrap = new ShapeListWrap[T] {
+            override type Data = (current.Data, wrap.Data)
+            override type Rep = (current.Rep, wrap.Rep)
+            override type TargetRep = (current.TargetRep, wrap.TargetRep)
+            override val rep: Rep = (current.rep, wrap.rep)
+            override val shape = {
+              Shape.tuple2Shape(current.shape, wrap.shape)
+            }
+            override val dataFromList
+              : List[T] => Option[(current.Data, wrap.Data)] = { data =>
+              data match {
+                case dataHead :: dataTail =>
+                  for {
+                    s <- current.dataFromList(dataHead)
+                    t <- wrap.dataFromList(dataTail)
+                  } yield {
+                    (s, t)
+                  }
+              }
+            }
+            override val dataToList: ((current.Data, wrap.Data)) => List[T] = {
+              data =>
+                val (h, t) = data
+                current.dataToList(h) :: wrap.dataToList(t)
+            }
+          }: ShapeListWrap[T]
+
+          currentWrap
+        }
+      case List(head) =>
+        new ShapeListWrap[T] {
+          override type Data = head.Data
+          override type Rep = head.Rep
+          override type TargetRep = head.TargetRep
+          override val rep: Rep = head.rep
+          override val shape = {
+            head.shape
+          }
+          override val dataToList: Data => List[T] = data =>
+            List(head.dataToList(data))
+          override val dataFromList: List[T] => Option[Data] = { data =>
+            head.dataFromList(data.head)
+          }
+        }: ShapeListWrap[T]
+      case _ =>
+        new ShapeListWrap[T] {
+          override type Data = Unit
+          override type Rep = Unit
+          override type TargetRep = Unit
+          override val rep: Rep = (())
+          override val shape = {
+            Shape.unitShape[FlatShapeLevel]
+          }
+          override val dataFromList: List[T] => Option[Unit] = data =>
+            Option(())
+          override val dataToList: Unit => List[T] = { data =>
+            List.empty
+          }
+        }: ShapeListWrap[T]
+    }
+
+    val tatalShapeValue = ShapedValue(sWrap.rep, sWrap.shape)
+
+    ShapedValue(
+      tatalShapeValue
+        .<>[List[T]](
+          s => sWrap.dataToList(s),
+          s => sWrap.dataFromList(s)
+        ),
+      implicitly[Shape[FlatShapeLevel,
+                       MappedProjection[List[T], sWrap.Data],
+                       List[T],
+                       MappedProjection[List[T], sWrap.Data]]]
+    ).asInstanceOf[ShapedValue[Any, List[T]]]
+  }
+
 }

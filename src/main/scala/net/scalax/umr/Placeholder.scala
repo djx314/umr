@@ -1,6 +1,5 @@
 package net.scalax.umr
 
-trait Placeholder {
-}
+trait Placeholder {}
 
 object Placeholder extends Placeholder

@@ -1,23 +1,21 @@
 package net.scalax.slick.async
 
-import net.scalax.umr.{ ChangeList, MappedShape, Placeholder, ShapeHelper }
+import net.scalax.umr._
 
 import scala.language.higherKinds
 import slick.jdbc.H2Profile.api._
-import org.h2.jdbcx.JdbcDataSource
 import org.scalatest._
 import org.scalatest.concurrent.ScalaFutures
 import org.slf4j.LoggerFactory
-import slick.lifted.ShapedValue
 
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.{Failure, Success}
 
-case class Friends(
-  id: Option[Long] = None,
-  name: String,
-  nick: String,
-  age: Int)
+case class Friends(id: Option[Long] = None,
+                   name: String,
+                   nick: String,
+                   age: Int)
 
 class FriendTable(tag: slick.lifted.Tag) extends Table[Friends](tag, "firend") {
   def id = column[Long]("id", O.AutoInc)
@@ -28,13 +26,13 @@ class FriendTable(tag: slick.lifted.Tag) extends Table[Friends](tag, "firend") {
   def * = (id.?, name, nick, age).mapTo[Friends]
 }
 
-class AsyncTest extends FlatSpec
-  with Matchers
-  with EitherValues
-  with ScalaFutures
-  with BeforeAndAfterAll
-  with BeforeAndAfter
-  with ShapeHelper {
+class AsyncTest
+    extends FlatSpec
+    with Matchers
+    with EitherValues
+    with ScalaFutures
+    with BeforeAndAfterAll
+    with BeforeAndAfter {
 
   val t = 10.seconds
   override implicit val patienceConfig = PatienceConfig(timeout = t)
@@ -42,11 +40,9 @@ class AsyncTest extends FlatSpec
 
   val friendTq = TableQuery[FriendTable]
 
-  lazy val db = {
-    val datasource = new JdbcDataSource()
-    datasource.setUrl(s"jdbc:h2:mem:hfTest;DB_CLOSE_DELAY=-1")
-    Database.forDataSource(datasource, None)
-  }
+  val db = Database.forURL(s"jdbc:h2:mem:hfTest;DB_CLOSE_DELAY=-1",
+                           driver = "org.h2.Driver",
+                           keepAliveConnection = true)
 
   override def beforeAll = {
     db.run(friendTq.schema.create).futureValue
@@ -75,7 +71,8 @@ class AsyncTest extends FlatSpec
         }
       }
       db.run(friendQuery).futureValue
-      db.run(friendTq.update(Friends(None, "hahahahaha", "hahahahaha", 26))).futureValue
+      db.run(friendTq.update(Friends(None, "hahahahaha", "hahahahaha", 26)))
+        .futureValue
       db.run(friendQuery).futureValue
     } catch {
       case e: Exception =>
@@ -86,17 +83,23 @@ class AsyncTest extends FlatSpec
 
   "shape" should "decode reps with db" in {
     val query = friendTq.map { friend =>
-      (friend.id, List(friend.nick, MappedShape.repMap(friend.name -> friend.nick).map { case (name, nick) => s"姓名：$name 昵称：$nick" }), friend.id)
+      (friend.id,
+       ListShape(friend.nick,
+                 ShapeValueWrap.toWrap(friend.name -> friend.nick).map {
+                   case (name, nick) => s"姓名：$name 昵称：$nick"
+                 }),
+       friend.id)
     }
     try {
       val friendQuery = for {
         inFriend <- query.result
-      } yield for {
-        s <- inFriend
-      } yield {
-        println(s)
-        s
-      }
+      } yield
+        for {
+          s <- inFriend
+        } yield {
+          println(s)
+          s
+        }
       db.run(friendQuery).futureValue
     } catch {
       case e: Exception =>
@@ -107,7 +110,7 @@ class AsyncTest extends FlatSpec
 
   "shape" should "decode reps with update" in {
     val query = friendTq.map { friend =>
-      List(friend.nick, friend.name)
+      ListShape(friend.nick, friend.name)
     }
     try {
       val action = query.update(List("汪汪酱", "喵喵酱"))
@@ -130,33 +133,47 @@ class AsyncTest extends FlatSpec
     ColInfo("id", "Long"),
     ColInfo("name", "String"),
     ColInfo("nick", "String"),
-    ColInfo("total", "Model"))
+    ColInfo("totalModel", "Model")
+  )
 
   def tableToCol(commonTable: FriendTable) = {
     infos.map { info =>
       info match {
-        case ColInfo(name, "Long") => MappedShape.toJson(name, commonTable.column[Long](name))
-        case ColInfo(name, "String") => MappedShape.toJson(name, commonTable.column[String](name))
-        case ColInfo(name, "Int") => MappedShape.toJson(name, commonTable.column[Int](name))
-        case ColInfo(name, "Model") => MappedShape.toJson(name, commonTable)
+        case ColInfo(name, "Long") =>
+          MappedShape.toJson(name, commonTable.column[Long](name))
+        case ColInfo(name, "String") =>
+          MappedShape.toJson(name, commonTable.column[String](name))
+        case ColInfo(name, "Int") =>
+          MappedShape.toJson(name, commonTable.column[Int](name))
+        case ColInfo(name, "Model") =>
+          MappedShape.toJson(name, commonTable)
       }
     }
   }
 
   "shape" should "decode data to json object" in {
     val query = friendTq.map { friend =>
-      friend.id -> (tableToCol(friend): Seq[ShapedValue[Rep[(String, Json)], (String, Json)]])
+      friend.id -> ListShape(tableToCol(friend): _*)
     }
     try {
       val action = for {
         inFriend <- query.result
-      } yield for {
-        (id, json) <- inFriend
-      } yield {
-        JsonObject.fromMap(json.toMap)
-      }
-      val jobj = db.run(action).futureValue
-      println(jobj.map(_.asJson).mkString("\n"))
+      } yield
+        for {
+          (id, json) <- inFriend
+        } yield {
+          JsonObject.fromMap(json.toMap)
+        }
+      val jobj =
+        db.run(action)
+          .andThen {
+            case Success(s) =>
+            case Failure(e) =>
+              e.printStackTrace
+          }
+          .futureValue
+
+      println("6789" * 10 + jobj.map(_.asJson).mkString("\n"))
     } catch {
       case e: Exception =>
         logger.error("error", e)
@@ -166,20 +183,19 @@ class AsyncTest extends FlatSpec
 
   "data" should "update dynamic" in {
     val query = friendTq.map { friend =>
-      (
-        friend.name,
-        ChangeList(
-          MappedShape.set(friend.nick).value("我是小昵称"),
-          MappedShape.set(friend.age).value(2333)))
+      (friend.name,
+       ChangeList(MappedShape.set(friend.nick).value("我是小昵称"),
+                  MappedShape.set(friend.age).value(2333)))
     }
     try {
       val action = for {
         effectRows <- query.update("我是匿名", Placeholder)
-      } yield for {
-        s <- friendTq.result
-      } yield {
-        s
-      }
+      } yield
+        for {
+          s <- friendTq.result
+        } yield {
+          s
+        }
       val jobj = db.run(action.flatten).futureValue
       println(jobj.mkString("\n"))
     } catch {

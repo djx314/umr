@@ -1,4 +1,4 @@
-scalaVersion := "2.12.5"
+scalaVersion := "2.11.7"
 
 scalacOptions ++= Seq("-feature", "-deprecation")
 
@@ -11,14 +11,18 @@ libraryDependencies += "com.typesafe.slick" %% "slick-hikaricp" % slickVersion e
 libraryDependencies += "org.scalactic" %% "scalactic" % "3.0.5"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.5" % "test"
 
-libraryDependencies += "com.h2database" % "h2" % "1.4.192" % "test"
+libraryDependencies += "com.h2database" % "h2" % "1.4.197" % "test"
 
-libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.7.21" % "test"
+libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.7.25" % "test"
 
-val circeVersion = "0.8.0"
+val circeVersion = "0.9.3"
 
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core",
   "io.circe" %% "circe-generic",
   "io.circe" %% "circe-parser"
 ).map(_ % circeVersion)
+
+addCompilerPlugin(
+  "org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full
+)
