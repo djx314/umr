@@ -1,4 +1,4 @@
-scalaVersion := "2.11.7"
+scalaVersion := "2.12.5"
 
 scalacOptions ++= Seq("-feature", "-deprecation")
 
@@ -23,6 +23,4 @@ libraryDependencies ++= Seq(
   "io.circe" %% "circe-parser"
 ).map(_ % circeVersion)
 
-addCompilerPlugin(
-  "org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full
-)
+addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
