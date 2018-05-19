@@ -37,9 +37,10 @@ trait ShapeValueWrap[F] {
 object ShapeValueWrap {
 
   implicit def toWrap[R, D, T](rep: R)(
-      implicit shape: Shape[FlatShapeLevel, R, D, T]): ShapeValueWrap[D] = {
+      implicit shape: Shape[_ <: FlatShapeLevel, R, D, T])
+    : ShapeValueWrap[D] = {
     val rep1 = rep
-    val shape1 = shape
+    val shape1 = shape.asInstanceOf[Shape[FlatShapeLevel, R, D, T]]
     new ShapeValueWrap[D] {
       override type TargetRep = T
       override type Data = D
